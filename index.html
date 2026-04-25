@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Satellite Earth</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <main id="app">
+        <div id="globe" aria-label="Interactive 3D Earth with live satellite positions"></div>
+        <div id="labels" aria-hidden="true"></div>
+
+        <section id="topbar" class="glass-panel">
+            <p class="eyebrow">Real-Time Orbital View</p>
+            <h1>Live Satellite Earth</h1>
+            <p id="feedStatus">Loading active satellite catalog from CelesTrak...</p>
+
+            <div class="metrics" aria-label="Satellite feed metrics">
+                <div>
+                    <span class="metric-label">Tracked</span>
+                    <strong id="satCount">--</strong>
+                </div>
+                <div>
+                    <span class="metric-label">Feed</span>
+                    <strong id="feedSource">--</strong>
+                </div>
+                <div>
+                    <span class="metric-label">Updated</span>
+                    <strong id="updateTime">--</strong>
+                </div>
+            </div>
+
+            <form id="searchForm" class="search-row">
+                <input id="searchInput" type="search" placeholder="Search NORAD ID or satellite name" autocomplete="off">
+                <button type="submit">Find</button>
+            </form>
+
+            <div class="button-row">
+                <button id="refreshBtn" type="button">Refresh Feed</button>
+                <button id="resetViewBtn" type="button" class="ghost">Reset View</button>
+            </div>
+        </section>
+
+        <aside id="details" class="glass-panel" aria-live="polite">
+            <p class="eyebrow">Selected Satellite</p>
+            <h2 id="selectedName">Click any satellite</h2>
+            <p id="selectedSummary">Drag to rotate Earth, scroll to zoom, then click a satellite marker or labeled mission.</p>
+
+            <dl class="data-grid">
+                <div><dt>NORAD</dt><dd id="selectedNorad">--</dd></div>
+                <div><dt>Orbit</dt><dd id="selectedOrbit">--</dd></div>
+                <div><dt>Latitude</dt><dd id="selectedLat">--</dd></div>
+                <div><dt>Longitude</dt><dd id="selectedLon">--</dd></div>
+                <div><dt>Altitude</dt><dd id="selectedAlt">--</dd></div>
+                <div><dt>Speed</dt><dd id="selectedSpeed">--</dd></div>
+                <div><dt>Inclination</dt><dd id="selectedInclination">--</dd></div>
+                <div><dt>TLE Age</dt><dd id="selectedTleAge">--</dd></div>
+            </dl>
+
+            <div class="detail-section">
+                <h3>Current Instruments</h3>
+                <ul id="instrumentList">
+                    <li>Instrument manifests are shown for labeled missions when public metadata is available.</li>
+                </ul>
+            </div>
+
+            <div class="detail-section">
+                <h3>Live Data</h3>
+                <ul id="liveDataList">
+                    <li>Live orbital position is computed locally from the current TLE feed.</li>
+                </ul>
+            </div>
+        </aside>
+
+        <section id="legend" class="glass-panel">
+            <div><span class="dot leo"></span>LEO</div>
+            <div><span class="dot meo"></span>MEO</div>
+            <div><span class="dot geo"></span>GEO</div>
+            <div><span class="dot heo"></span>HEO</div>
+            <p>Marker altitude is visually compressed so low-Earth and geostationary satellites fit in one view.</p>
+            <div id="notableChips" class="chips" aria-label="Notable labeled satellites"></div>
+        </section>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/satellite.js@5.0.0/dist/satellite.min.js" defer></script>
+    <script src="app.js" defer></script>
+</body>
+</html>

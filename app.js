@@ -632,7 +632,7 @@ TESS
             const texture = await createCloudTextureFromTiles(metadata);
             texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
             clouds.material.map = texture;
-            clouds.material.opacity = 0.62;
+            clouds.material.opacity = 0.78;
             clouds.material.needsUpdate = true;
             clouds.visible = layers.clouds;
             cloudSource = "NASA " + metadata.date;
@@ -656,9 +656,9 @@ TESS
             texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
             earthMaterial.map = texture;
             earthMaterial.needsUpdate = true;
-            setFeedStatus("Live CelesTrak TLEs loaded. Earth surface uses NASA true-color imagery from " + metadata.date + ".");
+            setFeedStatus("Live CelesTrak TLEs loaded. Earth base uses NASA Blue Marble; clouds update separately from NASA GIBS.");
         } catch (error) {
-            console.warn("Live true-color Earth layer unavailable; keeping fallback Earth texture.", error);
+            console.warn("Blue Marble Earth layer unavailable; keeping fallback Earth texture.", error);
         }
     }
 
@@ -715,7 +715,7 @@ TESS
             const alpha = data[i + 3];
             if (alpha < 8) continue;
             const strength = Math.max(data[i], data[i + 1], data[i + 2]) / 255;
-            const opacity = strength > 0.08 ? Math.max(58, Math.min(245, Math.round(45 + strength * 235))) : 0;
+            const opacity = strength > 0.06 ? Math.max(88, Math.min(255, Math.round(75 + strength * 245))) : 0;
             data[i] = 255;
             data[i + 1] = 255;
             data[i + 2] = 255;

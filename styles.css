@@ -145,6 +145,10 @@ button {
 .dot.geo { background: #ffce66; box-shadow: 0 0 10px #ffce66; }
 .dot.heo { background: #ff7ad9; box-shadow: 0 0 10px #ff7ad9; }
 .dot.aircraft { background: #ffb45e; box-shadow: 0 0 10px #ffb45e; }
+.dot.aircraft {
+    border-radius: 2px 50% 50% 50%;
+    transform: rotate(45deg);
+}
 
 .eyebrow {
     margin: 0 0 8px;

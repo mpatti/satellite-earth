@@ -181,6 +181,7 @@ TESS
         feedStatus: document.getElementById("feedStatus"),
         refreshBtn: document.getElementById("refreshBtn"),
         resetViewBtn: document.getElementById("resetViewBtn"),
+        aircraftViewBtn: document.getElementById("aircraftViewBtn"),
         satellitesToggle: document.getElementById("satellitesToggle"),
         labelsToggle: document.getElementById("labelsToggle"),
         cloudsToggle: document.getElementById("cloudsToggle"),
@@ -399,6 +400,7 @@ TESS
     function bindEvents() {
         els.refreshBtn.addEventListener("click", () => loadSatelliteFeed(true));
         els.resetViewBtn.addEventListener("click", resetView);
+        els.aircraftViewBtn.addEventListener("click", showAircraftView);
         els.satellitesToggle.addEventListener("change", () => {
             layers.satellites = els.satellitesToggle.checked;
             els.labelsToggle.disabled = !layers.satellites;
@@ -591,10 +593,10 @@ TESS
         aircraftGeometry.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0, 0), EARTH_RADIUS + 0.18);
 
         aircraftPoints = new THREE.Points(aircraftGeometry, new THREE.PointsMaterial({
-            size: 0.026,
-            map: createPointTexture(),
+            size: 0.07,
+            map: createAircraftTexture(),
             transparent: true,
-            opacity: 0.44,
+            opacity: 0.92,
             alphaTest: 0.02,
             depthWrite: false,
             sizeAttenuation: true,
@@ -617,7 +619,7 @@ TESS
             const texture = await createCloudTextureFromTiles(metadata);
             texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
             clouds.material.map = texture;
-            clouds.material.opacity = 0.38;
+            clouds.material.opacity = 0.62;
             clouds.material.needsUpdate = true;
             clouds.visible = layers.clouds;
             cloudSource = "NASA " + metadata.date;
@@ -672,7 +674,7 @@ TESS
             const alpha = data[i + 3];
             if (alpha < 8) continue;
             const strength = Math.max(data[i], data[i + 1], data[i + 2]) / 255;
-            const opacity = Math.max(0, Math.min(215, Math.round(strength * 185)));
+            const opacity = strength > 0.08 ? Math.max(58, Math.min(245, Math.round(45 + strength * 235))) : 0;
             data[i] = 255;
             data[i + 1] = 255;
             data[i + 2] = 255;
@@ -1043,13 +1045,13 @@ TESS
         selectedIndex = -1;
         selectedAircraftIndex = -1;
         if (selectionRing) selectionRing.visible = false;
-        els.selectedName.textContent = "Click any satellite";
-        els.selectedSummary.textContent = "Drag to rotate Earth, scroll to zoom, then click a satellite marker or labeled mission.";
+        els.selectedName.textContent = "Click any object";
+        els.selectedSummary.textContent = "Drag to rotate Earth, scroll to zoom, then click a satellite marker, labeled mission, or amber aircraft marker.";
         [els.selectedNorad, els.selectedOrbit, els.selectedLat, els.selectedLon, els.selectedAlt, els.selectedSpeed, els.selectedInclination, els.selectedTleAge].forEach(el => {
             el.textContent = "--";
         });
         renderList(els.instrumentList, ["Instrument manifests are shown for labeled missions when public metadata is available."]);
-        renderList(els.liveDataList, ["Live orbital position is computed locally from the current TLE feed."]);
+        renderList(els.liveDataList, ["Live satellite orbit, cloud, and aircraft layers update from public feeds."]);
     }
 
     function renderList(element, items) {
@@ -1119,6 +1121,29 @@ TESS
         camera.position.set(0.55, 2.35, 8.1);
         controls.target.set(0, 0, 0);
         controls.update();
+    }
+
+    function showAircraftView() {
+        layers.satellites = false;
+        layers.labels = false;
+        layers.clouds = true;
+        layers.aircraft = true;
+        els.satellitesToggle.checked = false;
+        els.labelsToggle.checked = false;
+        els.labelsToggle.disabled = true;
+        els.cloudsToggle.checked = true;
+        els.aircraftToggle.checked = true;
+        if (clouds) clouds.visible = true;
+        if (aircraftPoints) aircraftPoints.visible = true;
+        if (!aircraft.length) loadAircraftFeed(true);
+        updateSatellitePositions(true);
+        updateLabels();
+        clearSelection();
+        camera.position.set(-0.8, 3.0, 7.7);
+        controls.target.set(0, 0, 0);
+        controls.update();
+        els.cloudStatus.textContent = "Clouds: " + cloudSource;
+        els.aircraftStatus.textContent = aircraftStatusText();
     }
 
     function onResize() {
@@ -1204,6 +1229,45 @@ TESS
         ctx.fillStyle = gradient;
         ctx.fillRect(0, 0, 64, 64);
         return new THREE.CanvasTexture(canvas);
+    }
+
+    function createAircraftTexture() {
+        const canvas = document.createElement("canvas");
+        canvas.width = 96;
+        canvas.height = 96;
+        const ctx = canvas.getContext("2d");
+        ctx.clearRect(0, 0, 96, 96);
+
+        const glow = ctx.createRadialGradient(48, 48, 0, 48, 48, 42);
+        glow.addColorStop(0, "rgba(255, 214, 128, 0.92)");
+        glow.addColorStop(0.44, "rgba(255, 160, 64, 0.34)");
+        glow.addColorStop(1, "rgba(255, 160, 64, 0)");
+        ctx.fillStyle = glow;
+        ctx.fillRect(0, 0, 96, 96);
+
+        ctx.save();
+        ctx.translate(48, 48);
+        ctx.fillStyle = "rgba(255, 236, 177, 0.96)";
+        ctx.strokeStyle = "rgba(255, 153, 49, 0.95)";
+        ctx.lineWidth = 5;
+        ctx.lineJoin = "round";
+        ctx.beginPath();
+        ctx.moveTo(0, -32);
+        ctx.lineTo(13, 6);
+        ctx.lineTo(32, 18);
+        ctx.lineTo(6, 20);
+        ctx.lineTo(0, 34);
+        ctx.lineTo(-6, 20);
+        ctx.lineTo(-32, 18);
+        ctx.lineTo(-13, 6);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+        return texture;
     }
 
     function drawLand(ctx, coords, color) {

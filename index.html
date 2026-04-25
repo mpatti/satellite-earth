@@ -71,13 +71,14 @@
             <div class="button-row">
                 <button id="refreshBtn" type="button">Refresh Feed</button>
                 <button id="resetViewBtn" type="button" class="ghost">Reset View</button>
+                <button id="aircraftViewBtn" type="button" class="ghost">Aircraft View</button>
             </div>
         </section>
 
         <aside id="details" class="glass-panel" aria-live="polite">
             <p class="eyebrow">Selected Object</p>
-            <h2 id="selectedName">Click any satellite</h2>
-            <p id="selectedSummary">Drag to rotate Earth, scroll to zoom, then click a satellite marker or labeled mission.</p>
+            <h2 id="selectedName">Click any object</h2>
+            <p id="selectedSummary">Drag to rotate Earth, scroll to zoom, then click a satellite marker, labeled mission, or amber aircraft marker.</p>
 
             <dl class="data-grid">
                 <div><dt>ID</dt><dd id="selectedNorad">--</dd></div>
@@ -119,6 +120,6 @@
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/satellite.js@5.0.0/dist/satellite.min.js" defer></script>
-    <script src="app.js?v=4" defer></script>
+    <script src="app.js?v=5" defer></script>
 </body>
 </html>

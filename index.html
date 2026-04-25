@@ -31,6 +31,38 @@
                 </div>
             </div>
 
+            <div class="view-controls" aria-label="Layer controls">
+                <label class="toggle-control">
+                    <input id="satellitesToggle" type="checkbox" checked>
+                    <span>Satellites</span>
+                </label>
+                <label class="toggle-control">
+                    <input id="labelsToggle" type="checkbox" checked>
+                    <span>Labels</span>
+                </label>
+                <label class="toggle-control">
+                    <input id="cloudsToggle" type="checkbox" checked>
+                    <span>Live Clouds</span>
+                </label>
+                <label class="toggle-control">
+                    <input id="aircraftToggle" type="checkbox" checked>
+                    <span>Aircraft</span>
+                </label>
+                <label class="select-control">
+                    <span>Dot Density</span>
+                    <select id="densitySelect">
+                        <option value="all" selected>All</option>
+                        <option value="focus">Calmer</option>
+                        <option value="notable">Notable</option>
+                    </select>
+                </label>
+            </div>
+
+            <div class="layer-status" aria-label="Live layer status">
+                <span id="cloudStatus">Clouds: loading</span>
+                <span id="aircraftStatus">Aircraft: loading</span>
+            </div>
+
             <form id="searchForm" class="search-row">
                 <input id="searchInput" type="search" placeholder="Search NORAD ID or satellite name" autocomplete="off">
                 <button type="submit">Find</button>
@@ -43,19 +75,19 @@
         </section>
 
         <aside id="details" class="glass-panel" aria-live="polite">
-            <p class="eyebrow">Selected Satellite</p>
+            <p class="eyebrow">Selected Object</p>
             <h2 id="selectedName">Click any satellite</h2>
             <p id="selectedSummary">Drag to rotate Earth, scroll to zoom, then click a satellite marker or labeled mission.</p>
 
             <dl class="data-grid">
-                <div><dt>NORAD</dt><dd id="selectedNorad">--</dd></div>
-                <div><dt>Orbit</dt><dd id="selectedOrbit">--</dd></div>
+                <div><dt>ID</dt><dd id="selectedNorad">--</dd></div>
+                <div><dt>Class</dt><dd id="selectedOrbit">--</dd></div>
                 <div><dt>Latitude</dt><dd id="selectedLat">--</dd></div>
                 <div><dt>Longitude</dt><dd id="selectedLon">--</dd></div>
                 <div><dt>Altitude</dt><dd id="selectedAlt">--</dd></div>
                 <div><dt>Speed</dt><dd id="selectedSpeed">--</dd></div>
-                <div><dt>Inclination</dt><dd id="selectedInclination">--</dd></div>
-                <div><dt>TLE Age</dt><dd id="selectedTleAge">--</dd></div>
+                <div><dt>Angle</dt><dd id="selectedInclination">--</dd></div>
+                <div><dt>Data Age</dt><dd id="selectedTleAge">--</dd></div>
             </dl>
 
             <div class="detail-section">
@@ -78,7 +110,8 @@
             <div><span class="dot meo"></span>MEO</div>
             <div><span class="dot geo"></span>GEO</div>
             <div><span class="dot heo"></span>HEO</div>
-            <p>Marker altitude is visually compressed so low-Earth and geostationary satellites fit in one view.</p>
+            <div><span class="dot aircraft"></span>Aircraft</div>
+            <p>Satellite altitude is compressed. Live clouds use NASA GIBS cloud fraction; aircraft use live public traffic feeds.</p>
             <div id="notableChips" class="chips" aria-label="Notable labeled satellites"></div>
         </section>
     </main>
@@ -86,6 +119,6 @@
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/satellite.js@5.0.0/dist/satellite.min.js" defer></script>
-    <script src="app.js" defer></script>
+    <script src="app.js?v=4" defer></script>
 </body>
 </html>

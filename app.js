@@ -1,11 +1,15 @@
 (() => {
     "use strict";
 
-    const FEED_URL = "https://celestrak.org/NORAD/elements/gp.php?GROUP=active&FORMAT=tle";
+    const DIRECT_FEED_URL = "https://celestrak.org/NORAD/elements/gp.php?GROUP=active&FORMAT=tle";
+    const VERCEL_FEED_URL = window.location.hostname.endsWith("vercel.app") ? "/api/tle" : "https://satellite-earth.vercel.app/api/tle";
+    const CLOUDS_API_URL = window.location.hostname.endsWith("vercel.app") ? "/api/clouds" : "https://satellite-earth.vercel.app/api/clouds";
+    const AIRCRAFT_API_URL = window.location.hostname.endsWith("vercel.app") ? "/api/aircraft" : "https://satellite-earth.vercel.app/api/aircraft";
     const EARTH_RADIUS = 2.05;
     const EARTH_KM = 6371;
     const POSITION_UPDATE_MS = 1200;
     const FEED_REFRESH_MS = 30 * 60 * 1000;
+    const AIRCRAFT_REFRESH_MS = 30 * 1000;
 
     const TEXTURES = {
         earth: "https://threejs.org/examples/textures/planets/earth_atmos_2048.jpg",
@@ -177,6 +181,13 @@ TESS
         feedStatus: document.getElementById("feedStatus"),
         refreshBtn: document.getElementById("refreshBtn"),
         resetViewBtn: document.getElementById("resetViewBtn"),
+        satellitesToggle: document.getElementById("satellitesToggle"),
+        labelsToggle: document.getElementById("labelsToggle"),
+        cloudsToggle: document.getElementById("cloudsToggle"),
+        aircraftToggle: document.getElementById("aircraftToggle"),
+        densitySelect: document.getElementById("densitySelect"),
+        cloudStatus: document.getElementById("cloudStatus"),
+        aircraftStatus: document.getElementById("aircraftStatus"),
         searchForm: document.getElementById("searchForm"),
         searchInput: document.getElementById("searchInput"),
         notableChips: document.getElementById("notableChips"),
@@ -205,20 +216,37 @@ TESS
     let controls;
     let earth;
     let clouds;
+    let cloudSource = "static cloud texture";
     let satellitePoints;
     let satelliteGeometry;
     let positionBuffer;
     let colorBuffer;
+    let aircraftPoints;
+    let aircraftGeometry;
+    let aircraftPositionBuffer;
+    let aircraftColorBuffer;
     let selectionRing;
     let textureLoader;
     let lastPositionUpdate = 0;
+    let lastAircraftUpdate = 0;
     let selectedIndex = -1;
+    let selectedAircraftIndex = -1;
+    let selectedKind = "satellite";
     let isLoading = false;
+    let isAircraftLoading = false;
     let feedRefreshTimer = 0;
     let pointerDown = null;
 
     const satellites = [];
+    const aircraft = [];
     const labelEntries = [];
+    const layers = {
+        satellites: true,
+        labels: true,
+        clouds: true,
+        aircraft: true,
+        density: "all"
+    };
     const raycaster = new THREE.Raycaster();
     const pointer = new THREE.Vector2();
     const projected = new THREE.Vector3();
@@ -230,6 +258,8 @@ TESS
         setupScene();
         bindEvents();
         loadSatelliteFeed();
+        loadLiveCloudLayer();
+        loadAircraftFeed();
         feedRefreshTimer = window.setInterval(loadSatelliteFeed, FEED_REFRESH_MS);
         animate(0);
     }
@@ -359,8 +389,8 @@ TESS
 
     function createSelectionRing() {
         selectionRing = new THREE.Mesh(
-            new THREE.RingGeometry(0.08, 0.14, 42),
-            new THREE.MeshBasicMaterial({ color: 0xfff27a, transparent: true, opacity: 0.92, side: THREE.DoubleSide, depthWrite: false })
+            new THREE.RingGeometry(0.035, 0.048, 48),
+            new THREE.MeshBasicMaterial({ color: 0xfff27a, transparent: true, opacity: 0.78, side: THREE.DoubleSide, depthWrite: false })
         );
         selectionRing.visible = false;
         scene.add(selectionRing);
@@ -369,6 +399,35 @@ TESS
     function bindEvents() {
         els.refreshBtn.addEventListener("click", () => loadSatelliteFeed(true));
         els.resetViewBtn.addEventListener("click", resetView);
+        els.satellitesToggle.addEventListener("change", () => {
+            layers.satellites = els.satellitesToggle.checked;
+            els.labelsToggle.disabled = !layers.satellites;
+            if (!layers.satellites) layers.labels = false;
+            else layers.labels = els.labelsToggle.checked;
+            updateSatellitePositions(true);
+            updateLabels();
+            if (!layers.satellites && selectedKind === "satellite") clearSelection();
+        });
+        els.labelsToggle.addEventListener("change", () => {
+            layers.labels = els.labelsToggle.checked;
+            updateLabels();
+        });
+        els.cloudsToggle.addEventListener("change", () => {
+            layers.clouds = els.cloudsToggle.checked;
+            if (clouds) clouds.visible = layers.clouds;
+            els.cloudStatus.textContent = layers.clouds ? "Clouds: " + cloudSource : "Clouds: hidden";
+        });
+        els.aircraftToggle.addEventListener("change", () => {
+            layers.aircraft = els.aircraftToggle.checked;
+            if (aircraftPoints) aircraftPoints.visible = layers.aircraft;
+            if (layers.aircraft && !aircraft.length) loadAircraftFeed(true);
+            if (!layers.aircraft && selectedKind === "aircraft") clearSelection();
+            els.aircraftStatus.textContent = layers.aircraft ? aircraftStatusText() : "Aircraft: hidden";
+        });
+        els.densitySelect.addEventListener("change", () => {
+            layers.density = els.densitySelect.value;
+            updateSatellitePositions(true);
+        });
         els.searchForm.addEventListener("submit", event => {
             event.preventDefault();
             selectFromSearch();
@@ -395,7 +454,9 @@ TESS
         let sourceLabel = "CelesTrak active";
         let usedFallback = false;
         try {
-            text = await fetchTle(FEED_URL);
+            const liveFeed = await fetchLiveTle();
+            text = liveFeed.text;
+            sourceLabel = liveFeed.sourceLabel;
         } catch (error) {
             console.warn("Live satellite feed unavailable; using fallback TLE set.", error);
             text = FALLBACK_TLES;
@@ -427,6 +488,27 @@ TESS
         isLoading = false;
     }
 
+    async function fetchLiveTle() {
+        const errors = [];
+        const candidates = [
+            { url: VERCEL_FEED_URL, sourceLabel: "CelesTrak live" },
+            { url: DIRECT_FEED_URL, sourceLabel: "CelesTrak direct" }
+        ];
+
+        for (const candidate of candidates) {
+            try {
+                return {
+                    text: await fetchTle(candidate.url),
+                    sourceLabel: candidate.sourceLabel
+                };
+            } catch (error) {
+                errors.push(candidate.url + ": " + (error instanceof Error ? error.message : String(error)));
+            }
+        }
+
+        throw new Error(errors.join("; "));
+    }
+
     async function fetchTle(url) {
         const controller = new AbortController();
         const timeout = window.setTimeout(() => controller.abort(), 18000);
@@ -441,6 +523,162 @@ TESS
         } finally {
             window.clearTimeout(timeout);
         }
+    }
+
+    async function loadAircraftFeed(manual = false) {
+        if (isAircraftLoading || !layers.aircraft) return;
+        isAircraftLoading = true;
+        const previousAircraft = selectedKind === "aircraft" && aircraft[selectedAircraftIndex] ? aircraft[selectedAircraftIndex].icao24 : "";
+        els.aircraftStatus.textContent = manual ? "Aircraft: refreshing" : "Aircraft: loading";
+
+        try {
+            const response = await fetch(AIRCRAFT_API_URL, { cache: "no-store" });
+            if (!response.ok) throw new Error("HTTP " + response.status);
+            const data = await response.json();
+            aircraft.length = 0;
+            const airborne = (data.aircraft || []).filter(item => !item.onGround);
+            for (const item of airborne.slice(0, 1600)) {
+                if (!Number.isFinite(item.lat) || !Number.isFinite(item.lon)) continue;
+                const altitudeMeters = Number.isFinite(item.geoAltitude) ? item.geoAltitude : item.baroAltitude;
+                const position = new THREE.Vector3();
+                writeLatLonVector(position, item.lat, item.lon, aircraftAltitudeToRadius(altitudeMeters));
+                aircraft.push({ ...item, feedSource: data.source || "aircraft feed", position });
+            }
+            createAircraftPoints();
+            if (previousAircraft) {
+                selectedAircraftIndex = aircraft.findIndex(item => item.icao24 === previousAircraft);
+                if (selectedAircraftIndex >= 0) updateSelectedDetails();
+                else clearSelection();
+            }
+            els.aircraftStatus.textContent = aircraftStatusText(data.source);
+        } catch (error) {
+            console.warn("Aircraft feed unavailable.", error);
+            els.aircraftStatus.textContent = "Aircraft: unavailable";
+        } finally {
+            isAircraftLoading = false;
+        }
+    }
+
+    function createAircraftPoints() {
+        if (aircraftPoints) {
+            scene.remove(aircraftPoints);
+            aircraftGeometry.dispose();
+            aircraftPoints.material.dispose();
+        }
+
+        aircraftPositionBuffer = new Float32Array(Math.max(1, aircraft.length) * 3);
+        aircraftColorBuffer = new Float32Array(Math.max(1, aircraft.length) * 3);
+        if (!aircraft.length) {
+            aircraftPositionBuffer[0] = 999;
+            aircraftPositionBuffer[1] = 999;
+            aircraftPositionBuffer[2] = 999;
+        }
+        for (let i = 0; i < aircraft.length; i += 1) {
+            const plane = aircraft[i];
+            const o = i * 3;
+            aircraftPositionBuffer[o] = plane.position.x;
+            aircraftPositionBuffer[o + 1] = plane.position.y;
+            aircraftPositionBuffer[o + 2] = plane.position.z;
+            const color = plane.onGround ? new THREE.Color(0x7f8a96) : new THREE.Color(0xd9a762);
+            aircraftColorBuffer[o] = color.r;
+            aircraftColorBuffer[o + 1] = color.g;
+            aircraftColorBuffer[o + 2] = color.b;
+        }
+
+        aircraftGeometry = new THREE.BufferGeometry();
+        aircraftGeometry.setAttribute("position", new THREE.BufferAttribute(aircraftPositionBuffer, 3));
+        aircraftGeometry.setAttribute("color", new THREE.BufferAttribute(aircraftColorBuffer, 3));
+        aircraftGeometry.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0, 0), EARTH_RADIUS + 0.18);
+
+        aircraftPoints = new THREE.Points(aircraftGeometry, new THREE.PointsMaterial({
+            size: 0.026,
+            map: createPointTexture(),
+            transparent: true,
+            opacity: 0.44,
+            alphaTest: 0.02,
+            depthWrite: false,
+            sizeAttenuation: true,
+            vertexColors: true,
+            blending: THREE.AdditiveBlending
+        }));
+        aircraftPoints.frustumCulled = false;
+        aircraftPoints.visible = layers.aircraft;
+        scene.add(aircraftPoints);
+    }
+
+    async function loadLiveCloudLayer() {
+        if (!layers.clouds || !clouds) return;
+        els.cloudStatus.textContent = "Clouds: loading";
+
+        try {
+            const response = await fetch(CLOUDS_API_URL, { cache: "no-store" });
+            if (!response.ok) throw new Error("HTTP " + response.status);
+            const metadata = await response.json();
+            const texture = await createCloudTextureFromTiles(metadata);
+            texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+            clouds.material.map = texture;
+            clouds.material.opacity = 0.38;
+            clouds.material.needsUpdate = true;
+            clouds.visible = layers.clouds;
+            cloudSource = "NASA " + metadata.date;
+            els.cloudStatus.textContent = "Clouds: " + metadata.date;
+        } catch (error) {
+            console.warn("Live cloud layer unavailable; keeping fallback clouds.", error);
+            cloudSource = "fallback";
+            els.cloudStatus.textContent = "Clouds: fallback";
+        }
+    }
+
+    async function createCloudTextureFromTiles(metadata) {
+        const cols = metadata.cols || 10;
+        const rows = metadata.rows || 5;
+        const canvas = document.createElement("canvas");
+        canvas.width = 2048;
+        canvas.height = 1024;
+        const ctx = canvas.getContext("2d");
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        const tileWidth = canvas.width / cols;
+        const tileHeight = canvas.height / rows;
+
+        const jobs = [];
+        for (let row = 0; row < rows; row += 1) {
+            for (let col = 0; col < cols; col += 1) {
+                const url = metadata.template.replace("{row}", String(row)).replace("{col}", String(col));
+                jobs.push(loadImage(url).then(image => {
+                    ctx.drawImage(image, col * tileWidth, row * tileHeight, tileWidth + 1, tileHeight + 1);
+                }).catch(() => false));
+            }
+        }
+
+        await Promise.all(jobs);
+        whitenCloudFractionCanvas(ctx, canvas.width, canvas.height);
+        return new THREE.CanvasTexture(canvas);
+    }
+
+    function loadImage(url) {
+        return new Promise((resolve, reject) => {
+            const image = new Image();
+            image.crossOrigin = "anonymous";
+            image.onload = () => resolve(image);
+            image.onerror = reject;
+            image.src = url;
+        });
+    }
+
+    function whitenCloudFractionCanvas(ctx, width, height) {
+        const image = ctx.getImageData(0, 0, width, height);
+        const data = image.data;
+        for (let i = 0; i < data.length; i += 4) {
+            const alpha = data[i + 3];
+            if (alpha < 8) continue;
+            const strength = Math.max(data[i], data[i + 1], data[i + 2]) / 255;
+            const opacity = Math.max(0, Math.min(215, Math.round(strength * 185)));
+            data[i] = 255;
+            data[i + 1] = 255;
+            data[i + 2] = 255;
+            data[i + 3] = opacity;
+        }
+        ctx.putImageData(image, 0, 0);
     }
 
     function parseTles(text) {
@@ -466,7 +704,7 @@ TESS
         try {
             const satrec = satellite.twoline2satrec(record.line1, record.line2);
             const catalogId = record.line1.slice(2, 7).trim();
-            const meta = NOTABLE[catalogId] || notableByName(record.name);
+            const meta = NOTABLE[catalogId] || null;
             return {
                 catalogId,
                 name: record.name || (meta && meta.fullName) || "NORAD " + catalogId,
@@ -514,10 +752,10 @@ TESS
         satelliteGeometry.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0, 0), 14);
 
         const material = new THREE.PointsMaterial({
-            size: 0.075,
+            size: 0.052,
             map: createPointTexture(),
             transparent: true,
-            opacity: 0.94,
+            opacity: 0.68,
             alphaTest: 0.02,
             depthWrite: false,
             sizeAttenuation: true,
@@ -558,13 +796,13 @@ TESS
             sat.alt = alt;
             sat.speed = speed;
             sat.orbitClass = orbitClass;
-            sat.visible = true;
-            visibleCount += 1;
+            sat.visible = shouldDisplaySatellite(sat, i);
+            if (sat.visible) visibleCount += 1;
 
             const o = i * 3;
-            positionBuffer[o] = sat.position.x;
-            positionBuffer[o + 1] = sat.position.y;
-            positionBuffer[o + 2] = sat.position.z;
+            positionBuffer[o] = sat.visible ? sat.position.x : 999;
+            positionBuffer[o + 1] = sat.visible ? sat.position.y : 999;
+            positionBuffer[o + 2] = sat.visible ? sat.position.z : 999;
 
             const color = orbitColorObjects[orbitClass] || orbitColorObjects.LEO;
             colorBuffer[o] = color.r;
@@ -575,9 +813,18 @@ TESS
         satelliteGeometry.attributes.position.needsUpdate = true;
         satelliteGeometry.attributes.color.needsUpdate = true;
         if (force) satelliteGeometry.computeBoundingSphere();
-        els.satCount.textContent = visibleCount.toLocaleString();
+        els.satCount.textContent = satellites.length ? satellites.length.toLocaleString() : visibleCount.toLocaleString();
         els.updateTime.textContent = formatClock(now);
-        if (selectedIndex >= 0) updateSelectedDetails();
+        if (selectedKind === "satellite" && selectedIndex >= 0) updateSelectedDetails();
+    }
+
+    function shouldDisplaySatellite(sat, index) {
+        if (!layers.satellites) return false;
+        if (selectedKind === "satellite" && selectedIndex === index) return true;
+        if (sat.meta) return true;
+        if (layers.density === "notable") return false;
+        if (layers.density === "focus") return index % 4 === 0;
+        return true;
     }
 
     function hideSatelliteAt(index, sat) {
@@ -591,8 +838,10 @@ TESS
     function buildLabels() {
         els.labels.textContent = "";
         labelEntries.length = 0;
+        const seen = new Set();
         satellites.forEach((sat, index) => {
-            if (!sat.meta) return;
+            if (!sat.meta || seen.has(sat.meta.label)) return;
+            seen.add(sat.meta.label);
             const label = document.createElement("div");
             label.className = "sat-label";
             label.textContent = sat.meta.label;
@@ -619,6 +868,7 @@ TESS
         const notableIndexes = satellites
             .map((sat, index) => ({ sat, index }))
             .filter(item => item.sat.meta)
+            .filter((item, index, list) => list.findIndex(candidate => candidate.sat.meta.label === item.sat.meta.label) === index)
             .sort((a, b) => a.sat.meta.label.localeCompare(b.sat.meta.label));
 
         if (!notableIndexes.length) {
@@ -638,6 +888,13 @@ TESS
 
     function updateLabels() {
         if (!labelEntries.length) return;
+        if (!layers.labels || !layers.satellites) {
+            labelEntries.forEach(entry => {
+                entry.label.style.opacity = "0";
+                entry.label.style.pointerEvents = "none";
+            });
+            return;
+        }
         const width = window.innerWidth;
         const height = window.innerHeight;
         for (const entry of labelEntries) {
@@ -661,22 +918,39 @@ TESS
     }
 
     function pickSatellite(event) {
-        if (!satellitePoints || !satellites.length) return;
         const rect = renderer.domElement.getBoundingClientRect();
         pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
         pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
         raycaster.setFromCamera(pointer, camera);
-        const hits = raycaster.intersectObject(satellitePoints);
+        const hits = layers.satellites && satellitePoints ? raycaster.intersectObject(satellitePoints) : [];
         if (hits.length && Number.isInteger(hits[0].index)) {
             selectSatellite(hits[0].index, false);
+            return;
+        }
+
+        const aircraftHits = layers.aircraft && aircraftPoints ? raycaster.intersectObject(aircraftPoints) : [];
+        if (aircraftHits.length && Number.isInteger(aircraftHits[0].index)) {
+            selectAircraft(aircraftHits[0].index, false);
         }
     }
 
     function selectSatellite(index, focus) {
         if (!satellites[index]) return;
+        selectedKind = "satellite";
         selectedIndex = index;
+        selectedAircraftIndex = -1;
+        updateSatellitePositions(true);
         updateSelectedDetails();
         if (focus) focusSatellite(satellites[index]);
+    }
+
+    function selectAircraft(index, focus) {
+        if (!aircraft[index]) return;
+        selectedKind = "aircraft";
+        selectedAircraftIndex = index;
+        selectedIndex = -1;
+        updateSelectedDetails();
+        if (focus) focusPosition(aircraft[index].position);
     }
 
     function selectFromSearch() {
@@ -694,6 +968,11 @@ TESS
     }
 
     function updateSelectedDetails() {
+        if (selectedKind === "aircraft") {
+            updateSelectedAircraftDetails();
+            return;
+        }
+
         const sat = satellites[selectedIndex];
         if (!sat) {
             clearSelection();
@@ -730,8 +1009,39 @@ TESS
         renderList(els.liveDataList, liveItems);
     }
 
+    function updateSelectedAircraftDetails() {
+        const plane = aircraft[selectedAircraftIndex];
+        if (!plane) {
+            clearSelection();
+            return;
+        }
+
+        const altitudeMeters = Number.isFinite(plane.geoAltitude) ? plane.geoAltitude : plane.baroAltitude;
+        els.selectedName.textContent = plane.callsign || plane.icao24.toUpperCase();
+        const source = plane.feedSource || "live public aircraft traffic feed";
+        els.selectedSummary.textContent = "Live airborne aircraft state from " + source + ". Coverage depends on public receiver availability and source rate limits.";
+        els.selectedNorad.textContent = plane.icao24.toUpperCase();
+        els.selectedOrbit.textContent = plane.onGround ? "On ground" : "Airborne";
+        els.selectedLat.textContent = formatLatitude(plane.lat);
+        els.selectedLon.textContent = formatLongitude(plane.lon);
+        els.selectedAlt.textContent = Number.isFinite(altitudeMeters) ? Math.round(altitudeMeters).toLocaleString() + " m" : "--";
+        els.selectedSpeed.textContent = Number.isFinite(plane.velocity) ? (plane.velocity * 3.6).toFixed(0) + " km/h" : "--";
+        els.selectedInclination.textContent = Number.isFinite(plane.heading) ? plane.heading.toFixed(0) + " deg" : "--";
+        els.selectedTleAge.textContent = plane.lastContact ? formatSecondsAgo(Date.now() / 1000 - plane.lastContact) : "--";
+        renderList(els.instrumentList, ["Aircraft telemetry includes position, altitude, heading, velocity, and last contact where published by the active traffic source."]);
+        renderList(els.liveDataList, [
+            "Reported identity: " + plane.country,
+            "Ground point: " + formatLatitude(plane.lat) + ", " + formatLongitude(plane.lon),
+            Number.isFinite(altitudeMeters) ? "Current altitude: " + Math.round(altitudeMeters).toLocaleString() + " m" : "Current altitude: unknown",
+            Number.isFinite(plane.verticalRate) ? "Vertical rate: " + plane.verticalRate.toFixed(1) + " m/s" : "Vertical rate: unknown",
+            "Last contact: " + (plane.lastContact ? new Date(plane.lastContact * 1000).toISOString().replace("T", " ").slice(0, 19) + " UTC" : "unknown")
+        ]);
+    }
+
     function clearSelection() {
+        selectedKind = "satellite";
         selectedIndex = -1;
+        selectedAircraftIndex = -1;
         if (selectionRing) selectionRing.visible = false;
         els.selectedName.textContent = "Click any satellite";
         els.selectedSummary.textContent = "Drag to rotate Earth, scroll to zoom, then click a satellite marker or labeled mission.";
@@ -760,10 +1070,14 @@ TESS
     function animate(time) {
         window.requestAnimationFrame(animate);
         controls.update();
-        if (clouds) clouds.rotation.y += 0.00008;
+        if (clouds && layers.clouds) clouds.rotation.y += 0.00005;
         if (time - lastPositionUpdate > POSITION_UPDATE_MS) {
             lastPositionUpdate = time;
             updateSatellitePositions();
+        }
+        if (layers.aircraft && time - lastAircraftUpdate > AIRCRAFT_REFRESH_MS) {
+            lastAircraftUpdate = time;
+            loadAircraftFeed();
         }
         updateSelectionRing(time);
         updateLabels();
@@ -771,24 +1085,31 @@ TESS
     }
 
     function updateSelectionRing(time) {
-        if (selectedIndex < 0 || !selectionRing) return;
-        const sat = satellites[selectedIndex];
-        if (!sat || !sat.visible) {
+        if (!selectionRing) return;
+        if (selectedKind === "satellite" && selectedIndex < 0) return;
+        if (selectedKind === "aircraft" && selectedAircraftIndex < 0) return;
+        const target = selectedKind === "aircraft" ? aircraft[selectedAircraftIndex] : satellites[selectedIndex];
+        if (!target || !target.position || (selectedKind === "satellite" && !target.visible)) {
             selectionRing.visible = false;
             return;
         }
         selectionRing.visible = true;
-        selectionRing.position.copy(sat.position);
+        selectionRing.position.copy(target.position);
         selectionRing.lookAt(camera.position);
-        const distance = camera.position.distanceTo(sat.position);
-        const pulse = 1 + Math.sin(time * 0.006) * 0.08;
-        selectionRing.scale.setScalar(Math.max(0.75, Math.min(1.7, distance * 0.12)) * pulse);
+        const distance = camera.position.distanceTo(target.position);
+        const pulse = 1 + Math.sin(time * 0.006) * 0.06;
+        selectionRing.scale.setScalar(Math.max(0.42, Math.min(0.95, distance * 0.045)) * pulse);
     }
 
     function focusSatellite(sat) {
         if (!sat || !sat.visible) return;
-        const direction = sat.position.clone().normalize();
-        const distance = Math.max(5.0, Math.min(13.5, sat.position.length() + 3.1));
+        focusPosition(sat.position);
+    }
+
+    function focusPosition(position) {
+        if (!position) return;
+        const direction = position.clone().normalize();
+        const distance = Math.max(7.0, Math.min(15.5, position.length() + 5.0));
         camera.position.copy(direction.multiplyScalar(distance));
         controls.target.set(0, 0, 0);
         controls.update();
@@ -914,6 +1235,11 @@ TESS
         return EARTH_RADIUS + 0.09 + EARTH_RADIUS * (safeAlt / EARTH_KM) * 0.38;
     }
 
+    function aircraftAltitudeToRadius(altitudeMeters) {
+        const safeAltitude = Math.max(0, Math.min(14000, Number.isFinite(altitudeMeters) ? altitudeMeters : 0));
+        return EARTH_RADIUS + 0.035 + safeAltitude / 14000 * 0.085;
+    }
+
     function classifyOrbit(altKm, meanMotion) {
         if (Number.isFinite(altKm)) {
             if (altKm < 2000) return "LEO";
@@ -980,6 +1306,20 @@ TESS
         if (!Number.isFinite(days)) return "--";
         if (Math.abs(days) < 1) return Math.abs(days * 24).toFixed(1) + " hours";
         return Math.abs(days).toFixed(1) + " days";
+    }
+
+    function formatSecondsAgo(seconds) {
+        if (!Number.isFinite(seconds)) return "--";
+        if (seconds < 60) return Math.max(0, Math.round(seconds)) + " sec";
+        if (seconds < 3600) return Math.round(seconds / 60) + " min";
+        return (seconds / 3600).toFixed(1) + " hr";
+    }
+
+    function aircraftStatusText(source) {
+        if (!layers.aircraft) return "Aircraft: hidden";
+        if (!aircraft.length) return "Aircraft: loading";
+        const mode = source && source.toLowerCase().includes("sample") ? " sample" : source ? " live" : "";
+        return "Aircraft: " + aircraft.length.toLocaleString() + mode;
     }
 
     function setFeedStatus(message) {

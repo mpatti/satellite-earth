@@ -14,7 +14,8 @@ body {
 }
 
 button,
-input {
+input,
+select {
     font: inherit;
 }
 
@@ -53,15 +54,15 @@ button {
     display: inline-flex;
     align-items: center;
     gap: 7px;
-    padding: 6px 9px;
+    padding: 5px 8px;
     border: 1px solid rgba(134, 215, 255, 0.42);
     border-radius: 999px;
-    background: rgba(5, 13, 26, 0.72);
+    background: rgba(5, 13, 26, 0.62);
     box-shadow: 0 10px 26px rgba(0, 0, 0, 0.36), 0 0 18px rgba(77, 193, 255, 0.16);
     color: #ecf8ff;
-    font-size: 11px;
+    font-size: 10px;
     font-weight: 900;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.07em;
     line-height: 1;
     text-transform: uppercase;
     text-shadow: 0 1px 8px #000;
@@ -74,8 +75,8 @@ button {
 
 .sat-label::before {
     content: "";
-    width: 7px;
-    height: 7px;
+    width: 6px;
+    height: 6px;
     border-radius: 50%;
     background: #fff27a;
     box-shadow: 0 0 12px #fff27a;
@@ -94,16 +95,16 @@ button {
 #topbar {
     top: 18px;
     left: 18px;
-    width: min(420px, calc(100vw - 36px));
-    padding: 20px;
+    width: min(390px, calc(100vw - 36px));
+    padding: 18px;
 }
 
 #details {
     top: 18px;
     right: 18px;
     bottom: 18px;
-    width: min(410px, calc(100vw - 36px));
-    padding: 20px;
+    width: min(390px, calc(100vw - 36px));
+    padding: 18px;
     overflow: auto;
 }
 
@@ -113,7 +114,7 @@ button {
     width: min(430px, calc(100vw - 36px));
     padding: 14px 16px;
     display: grid;
-    grid-template-columns: repeat(4, auto);
+    grid-template-columns: repeat(5, auto);
     gap: 10px 14px;
     align-items: center;
     color: rgba(236, 247, 255, 0.82);
@@ -143,6 +144,7 @@ button {
 .dot.meo { background: #b8ff7a; box-shadow: 0 0 10px #b8ff7a; }
 .dot.geo { background: #ffce66; box-shadow: 0 0 10px #ffce66; }
 .dot.heo { background: #ff7ad9; box-shadow: 0 0 10px #ff7ad9; }
+.dot.aircraft { background: #ffb45e; box-shadow: 0 0 10px #ffb45e; }
 
 .eyebrow {
     margin: 0 0 8px;
@@ -161,10 +163,10 @@ p {
 }
 
 h1 {
-    margin-bottom: 8px;
+    margin-bottom: 10px;
     color: #fff;
-    font-size: clamp(34px, 5vw, 58px);
-    line-height: 0.88;
+    font-size: clamp(30px, 4.2vw, 48px);
+    line-height: 0.92;
     letter-spacing: -0.06em;
     text-wrap: balance;
 }
@@ -172,7 +174,7 @@ h1 {
 h2 {
     margin-bottom: 8px;
     color: #fff;
-    font-size: 28px;
+    font-size: 25px;
     line-height: 1;
     letter-spacing: -0.04em;
 }
@@ -197,7 +199,7 @@ h3 {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     gap: 9px;
-    margin: 15px 0;
+    margin: 13px 0;
 }
 
 .metrics > div,
@@ -208,7 +210,7 @@ h3 {
 }
 
 .metrics > div {
-    padding: 10px 11px;
+    padding: 9px 10px;
 }
 
 .metric-label,
@@ -226,10 +228,76 @@ dt {
     margin-top: 5px;
     color: #fff;
     overflow: hidden;
-    font-size: 17px;
+    font-size: 16px;
     line-height: 1.1;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.view-controls {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 6px;
+    margin: 0 0 9px;
+}
+
+.toggle-control,
+.select-control {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-width: 0;
+    padding: 7px 8px;
+    border: 1px solid rgba(145, 210, 255, 0.16);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.055);
+    color: rgba(234, 246, 255, 0.86);
+    font-size: 11px;
+    font-weight: 850;
+}
+
+.toggle-control:has(input:disabled) {
+    opacity: 0.42;
+}
+
+.toggle-control input {
+    width: 14px;
+    height: 14px;
+    accent-color: #84ecff;
+}
+
+.select-control {
+    grid-column: 1 / -1;
+    justify-content: space-between;
+}
+
+.select-control select {
+    min-width: 112px;
+    padding: 6px 28px 6px 9px;
+    border: 1px solid rgba(153, 218, 255, 0.24);
+    border-radius: 10px;
+    color: #eef8ff;
+    background: rgba(1, 7, 18, 0.72);
+}
+
+.layer-status {
+    display: flex;
+    gap: 6px;
+    margin: -1px 0 10px;
+    flex-wrap: wrap;
+}
+
+.layer-status span {
+    padding: 4px 7px;
+    border: 1px solid rgba(139, 213, 255, 0.16);
+    border-radius: 999px;
+    color: rgba(224, 240, 255, 0.65);
+    background: rgba(255, 255, 255, 0.045);
+    font-size: 9px;
+    font-weight: 850;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
 }
 
 .search-row,
@@ -293,11 +361,11 @@ button.ghost {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
     gap: 9px;
-    margin: 16px 0 18px;
+    margin: 14px 0 16px;
 }
 
 .data-grid > div {
-    padding: 10px 11px;
+    padding: 9px 10px;
 }
 
 dd {

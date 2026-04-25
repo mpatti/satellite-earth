@@ -2,10 +2,23 @@ const OPENSKY_URL = "https://opensky-network.org/api/states/all";
 const ADSB_POINT_URL = "https://api.adsb.lol/v2/point/{lat}/{lon}/250";
 
 const ADSB_SAMPLE_CENTERS = [
-    [40.64, -73.78], [33.94, -118.40], [41.98, -87.90], [32.90, -97.04],
-    [25.79, -80.29], [47.45, -122.31], [51.47, -0.45], [49.00, 2.55],
-    [52.31, 4.76], [50.04, 8.56], [41.80, 12.25], [25.25, 55.36],
-    [1.36, 103.99], [35.55, 139.78], [22.31, 113.92], [-33.95, 151.18]
+    [40.64, -73.78], [42.36, -71.01], [38.85, -77.04], [33.64, -84.43],
+    [25.79, -80.29], [41.98, -87.90], [32.90, -97.04], [39.86, -104.67],
+    [33.94, -118.40], [37.62, -122.38], [47.45, -122.31], [49.19, -123.18],
+    [43.68, -79.63], [19.44, -99.07], [9.07, -79.38], [61.17, -150.00],
+    [21.32, -157.92], [51.47, -0.45], [49.00, 2.55], [52.31, 4.76],
+    [50.04, 8.56], [40.49, -3.57], [41.80, 12.25], [45.63, 8.72],
+    [52.17, 20.97], [59.65, 17.92], [60.19, 11.10], [38.00, 23.95],
+    [41.28, 28.75], [55.97, 37.41], [33.37, -7.59], [30.12, 31.41],
+    [6.58, 3.32], [5.60, -0.17], [-1.32, 36.93], [8.98, 38.80],
+    [-26.13, 28.24], [25.25, 55.36], [25.27, 51.61], [24.96, 46.70],
+    [32.00, 34.89], [28.56, 77.10], [19.09, 72.87], [13.69, 100.75],
+    [1.36, 103.99], [-6.13, 106.66], [14.51, 121.02], [22.31, 113.92],
+    [25.08, 121.23], [37.46, 126.44], [35.55, 139.78], [34.79, 135.44],
+    [31.14, 121.80], [40.08, 116.58], [23.39, 113.30], [-33.95, 151.18],
+    [-37.67, 144.84], [-27.38, 153.12], [-36.99, 174.79], [4.70, -74.15],
+    [-12.02, -77.11], [-23.43, -46.47], [-34.82, -58.54], [-33.39, -70.79],
+    [50.0, -30.0], [40.0, -50.0], [35.0, -145.0], [13.5, 144.8]
 ];
 
 export default async function handler(request, response) {
@@ -76,7 +89,7 @@ async function fetchAdsbLolSample() {
     const seen = new Map();
     const requests = ADSB_SAMPLE_CENTERS.map(([lat, lon]) => {
         const url = ADSB_POINT_URL.replace("{lat}", String(lat)).replace("{lon}", String(lon));
-        return fetch(url, { headers: { "User-Agent": "satellite-earth/1.0" } })
+        return fetch(url, { headers: { "User-Agent": "satellite-earth/1.0" }, signal: AbortSignal.timeout(5500) })
             .then(response => response.ok ? response.json() : null)
             .catch(() => null);
     });
@@ -91,11 +104,11 @@ async function fetchAdsbLolSample() {
         }
     }
 
-    if (!seen.size) throw new Error("ADSB.lol regional sample returned no aircraft.");
+    if (!seen.size) throw new Error("ADSB.lol worldwide sample returned no aircraft.");
 
     return {
-        source: "ADSB.lol regional live traffic sample",
-        coverage: "regional sample",
+        source: "ADSB.lol worldwide public ADS-B sample",
+        coverage: "worldwide sampled public receiver coverage",
         time: now,
         count: seen.size,
         aircraft: Array.from(seen.values())

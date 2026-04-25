@@ -3,6 +3,7 @@
 
     const DIRECT_FEED_URL = "https://celestrak.org/NORAD/elements/gp.php?GROUP=active&FORMAT=tle";
     const VERCEL_FEED_URL = window.location.hostname.endsWith("vercel.app") ? "/api/tle" : "https://satellite-earth.vercel.app/api/tle";
+    const EARTH_API_URL = window.location.hostname.endsWith("vercel.app") ? "/api/earth" : "https://satellite-earth.vercel.app/api/earth";
     const CLOUDS_API_URL = window.location.hostname.endsWith("vercel.app") ? "/api/clouds" : "https://satellite-earth.vercel.app/api/clouds";
     const AIRCRAFT_API_URL = window.location.hostname.endsWith("vercel.app") ? "/api/aircraft" : "https://satellite-earth.vercel.app/api/aircraft";
     const EARTH_RADIUS = 2.05;
@@ -216,6 +217,7 @@ TESS
     let renderer;
     let controls;
     let earth;
+    let earthMaterial;
     let clouds;
     let cloudSource = "static cloud texture";
     let satellitePoints;
@@ -259,6 +261,7 @@ TESS
         setupScene();
         bindEvents();
         loadSatelliteFeed();
+        loadLiveEarthLayer();
         loadLiveCloudLayer();
         loadAircraftFeed();
         feedRefreshTimer = window.setInterval(loadSatelliteFeed, FEED_REFRESH_MS);
@@ -285,7 +288,7 @@ TESS
         controls.dampingFactor = 0.07;
         controls.rotateSpeed = 0.45;
         controls.zoomSpeed = 0.78;
-        controls.minDistance = 3.45;
+        controls.minDistance = 5.4;
         controls.maxDistance = 22;
         controls.target.set(0, 0, 0);
 
@@ -333,7 +336,7 @@ TESS
     }
 
     function createEarth() {
-        const earthMaterial = new THREE.MeshPhongMaterial({
+        earthMaterial = new THREE.MeshPhongMaterial({
             map: createFallbackEarthTexture(),
             bumpScale: 0.035,
             specular: new THREE.Color(0x18375f),
@@ -358,7 +361,7 @@ TESS
             earthMaterial.needsUpdate = true;
         });
 
-        const cloudMaterial = new THREE.MeshPhongMaterial({
+        const cloudMaterial = new THREE.MeshBasicMaterial({
             map: createFallbackCloudTexture(),
             transparent: true,
             opacity: 0.25,
@@ -539,7 +542,7 @@ TESS
             const data = await response.json();
             aircraft.length = 0;
             const airborne = (data.aircraft || []).filter(item => !item.onGround);
-            for (const item of airborne.slice(0, 1600)) {
+            for (const item of selectDisplayAircraft(airborne, 2600)) {
                 if (!Number.isFinite(item.lat) || !Number.isFinite(item.lon)) continue;
                 const altitudeMeters = Number.isFinite(item.geoAltitude) ? item.geoAltitude : item.baroAltitude;
                 const position = new THREE.Vector3();
@@ -559,6 +562,16 @@ TESS
         } finally {
             isAircraftLoading = false;
         }
+    }
+
+    function selectDisplayAircraft(items, limit) {
+        if (items.length <= limit) return items;
+        const selected = [];
+        const step = items.length / limit;
+        for (let i = 0; i < limit; i += 1) {
+            selected.push(items[Math.floor(i * step)]);
+        }
+        return selected;
     }
 
     function createAircraftPoints() {
@@ -631,16 +644,45 @@ TESS
         }
     }
 
+    async function loadLiveEarthLayer() {
+        if (!earthMaterial) return;
+
+        try {
+            const response = await fetch(EARTH_API_URL, { cache: "no-store" });
+            if (!response.ok) throw new Error("HTTP " + response.status);
+            const metadata = await response.json();
+            const texture = await createTiledTexture(metadata, 4096, 2048);
+            texture.encoding = THREE.sRGBEncoding;
+            texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+            earthMaterial.map = texture;
+            earthMaterial.needsUpdate = true;
+            setFeedStatus("Live CelesTrak TLEs loaded. Earth surface uses NASA true-color imagery from " + metadata.date + ".");
+        } catch (error) {
+            console.warn("Live true-color Earth layer unavailable; keeping fallback Earth texture.", error);
+        }
+    }
+
     async function createCloudTextureFromTiles(metadata) {
+        const canvas = await createTiledCanvas(metadata, 4096, 2048);
+        const ctx = canvas.getContext("2d");
+        whitenCloudFractionCanvas(ctx, canvas.width, canvas.height);
+        return new THREE.CanvasTexture(canvas);
+    }
+
+    async function createTiledTexture(metadata, width, height) {
+        return new THREE.CanvasTexture(await createTiledCanvas(metadata, width, height));
+    }
+
+    async function createTiledCanvas(metadata, width, height) {
         const cols = metadata.cols || 10;
         const rows = metadata.rows || 5;
         const canvas = document.createElement("canvas");
-        canvas.width = 2048;
-        canvas.height = 1024;
+        canvas.width = width;
+        canvas.height = height;
         const ctx = canvas.getContext("2d");
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        const tileWidth = canvas.width / cols;
-        const tileHeight = canvas.height / rows;
+        ctx.clearRect(0, 0, width, height);
+        const tileWidth = width / cols;
+        const tileHeight = height / rows;
 
         const jobs = [];
         for (let row = 0; row < rows; row += 1) {
@@ -653,8 +695,7 @@ TESS
         }
 
         await Promise.all(jobs);
-        whitenCloudFractionCanvas(ctx, canvas.width, canvas.height);
-        return new THREE.CanvasTexture(canvas);
+        return canvas;
     }
 
     function loadImage(url) {
